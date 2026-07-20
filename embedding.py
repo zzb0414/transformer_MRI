@@ -1,3 +1,7 @@
+"""
+Embedding layer.
+Author: Zhibo Zhu. Date: 07/15/2026.
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

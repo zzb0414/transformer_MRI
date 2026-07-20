@@ -1,3 +1,7 @@
+"""
+Encoder block.
+Author: Zhibo Zhu. Date: 07/16/2026.
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,9 +48,11 @@ class encoder_block(nn.Module):
         input (tensor):         [batch_size, seq_length, d_model]
         omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
         """
+        # MHSA block and residual connection 1.
         attention = self.self_attn(input, omega)
         input = self.LN1(input + self.dropout(attention))
 
+        # FFN and residual connection 2.
         feed_forward = self.FFN(input)
         output = self.LN2(input + self.dropout(feed_forward))
 

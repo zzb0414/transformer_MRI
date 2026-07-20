@@ -1,3 +1,7 @@
+"""
+Image domain refinement module.
+Author: Zhibo Zhu. Date: 07/16/2026.
+"""
 import torch
 import torch.nn as nn
 
@@ -8,6 +12,14 @@ class refine_module(nn.Module):
     Refinement module class that is composed of a predict layer, inverse FFT, a ResNet, forward FFT and an embedding layer.
     """
     def __init__(self, W, H, d_model):
+        """
+        Class initlization.
+
+        Args:
+        W (int):                Full k-space width.
+        H (int):                Full k-space height.
+        d_model (int):          Embedding space dimension.
+        """
         super().__init__()
 
         self.predict = embedding(input_channel=d_model, output_channel=2, bias=False, activation=nn.ReLU, drop=0.1)

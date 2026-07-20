@@ -1,3 +1,7 @@
+"""
+Positional encodings.
+Author: Zhibo Zhu. Date: 07/16/2026.
+"""
 import math
 import numpy as np
 import torch
@@ -12,7 +16,7 @@ class positional_encoding():
         Class initialization.
 
         Args:
-        pos (ndarray):          Position vector (1D) or matrix (2D).          
+        pos (ndarray):          Position vector (1D) or matrix (2D).
         d_model (int):          Embedding space dimension.
         appraoch (string):      Encoding approach.
         """
@@ -48,7 +52,7 @@ class positional_encoding():
         Args:
         input (Tensor):         Input tensor of shape [batch_size, seq_length, d_model].
         """
-        output = output + self.PE
+        output = input + self.PE
 
         return output
     
@@ -65,7 +69,7 @@ def PE1D(Ny, d_model):
     PE (Tensor):            Output tensor of shape [1, seq_length, d_model].
     """
     PE = torch.zeros(Ny, d_model)
-    position = torch.arange(0, Ny, dtype=torch.float).unsqueeze(1)
+    position = torch.arange(-Ny // 2, Ny // 2 - 1, dtype=torch.float).unsqueeze(1) # Shift by half.
     division_term = torch.exp(-torch.arange(0, d_model, 2, dtype=torch.float) / d_model * math.log(10000))
     PE[:, 0::2] = torch.sin(position * division_term)
     PE[:, 1::2] = torch.cos(position * division_term)
