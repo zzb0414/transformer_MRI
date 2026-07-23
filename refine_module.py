@@ -5,7 +5,6 @@ Author: Zhibo Zhu. Date: 07/16/2026.
 import torch
 import torch.nn as nn
 
-from embedding import embedding
 
 class refine_module(nn.Module):
     """
@@ -22,8 +21,9 @@ class refine_module(nn.Module):
         """
         super().__init__()
 
-        self.predict = embedding(input_channel=d_model, output_channel=2, bias=False, activation=nn.ReLU, drop=0.1)
-        self.embedding = embedding(input_channel=2, output_channel=d_model, bias=False, activation=nn.ReLU, drop=0.1)
+        # Linear projections without activation/dropout for space mapping
+        self.predict = nn.Linear(d_model, 2, bias=False)
+        self.embedding = nn.Linear(2, d_model, bias=False)
 
         self.FFT = lambda x: torch.fft.fftshift(torch.fft.fft2(x, norm='ortho')) # Expect input tensor x to have shape [batch_size, W, H]
         self.iFFT = lambda x: torch.fft.ifft2(torch.fft.ifftshift(x), norm='ortho')
@@ -55,14 +55,21 @@ class refine_module(nn.Module):
         S = S[..., 0] + 1j * S[..., 1]
 
         # Apply iFFT.
-        img = torch.fft.ifft2(torch.fft.ifftshift(S), norm='ortho')
+        img = torch.fft.ifft2(torch.fft.ifftshift(S), norm='ortho')  # [batch_size, W, H], complex
 
-        # Pass through convoluntion layers.
-        img += self.conv(img)
+        # Convert complex to 2-channel real tensor [batch_size, 2, W, H]
+        img = torch.stack((torch.real(img), torch.imag(img)), dim=1)
+
+        # Pass through convolution layers with residual.
+        img = img + self.conv(img)
+
+        # Convert 2-channel real back to complex [batch_size, W, H]
+        img_complex = torch.complex(img[:, 0, :, :], img[:, 1, :, :])
 
         # Apply FFT back to 2D kspace.
-        ksp = torch.fft.fftshift(torch.fft.fft2(img, norm='ortho')).contiguous().view(batch_size, seq_length).unsqueeze(2) # [batch_size, seq_length, 1]
-        ksp = torch.stack((torch.real(ksp), torch.imag(ksp)), dim=-1) # [batch_size, seq_length, 2]
+        ksp = torch.fft.fftshift(torch.fft.fft2(img_complex, norm='ortho'))  # [batch_size, W, H], complex
+        ksp = torch.stack((torch.real(ksp), torch.imag(ksp)), dim=-1)  # [batch_size, W, H, 2]
+        ksp = ksp.contiguous().view(batch_size, seq_length, 2)  # [batch_size, seq_length, 2]
 
         # Embed back to be passed into next layer.
         S_hat = S_identity + self.embedding(ksp)

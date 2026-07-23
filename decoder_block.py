@@ -57,7 +57,9 @@ class decoder_block(nn.Module):
 
         # MHSA and residual connection 2 for LR decoder only. For HR decoder, do nothing (flow forward).
         if LR: # Only LR decoder does self attention.
-            self_attention = self.self_attn(cross_attention, torch.ones(batch_size, seq_length))
+            # Create mask on the same device as the input
+            omega = torch.ones(batch_size, seq_length, device=cross_attention.device)
+            self_attention = self.self_attn(cross_attention, omega)  # TODO: Review against technical reference - currently using all coordinates as queries for fully sampled LR output
             self_attention = self.LN2(cross_attention + self.dropout(self_attention))
         else:
             self_attention = cross_attention

@@ -5,8 +5,9 @@ Author: Zhibo Zhu. Date: 07/16/2026.
 import math
 import numpy as np
 import torch
+import torch.nn as nn
 
-class positional_encoding():
+class positional_encoding(nn.Module):
     """
     A positional encoding class supporting the sinusoidal and the rotary positional encodings in 1D or 2D.
     """
@@ -20,33 +21,41 @@ class positional_encoding():
         d_model (int):          Embedding space dimension.
         appraoch (string):      Encoding approach.
         """
-        super().__init()
+        super().__init__()
 
         ndim = pos.ndim
         if ndim == 1:
             Ny = len(pos) # Ny lines.
+            Nx = None
         elif ndim == 2:
-            Ny, Nx = len(pos), len(pos[0]) # Ny lines and Nx points. Each invidual point has its own position in 2D space.
+            Ny, Nx = pos.shape # Ny lines, Nx points per line
+        elif ndim == 3:
+            # For 3D: pos shape is [2, H, W] from np.mgrid
+            # We have H rows (y) and W columns (x)
+            Ny, Nx = pos.shape[1], pos.shape[2]
         else:
-            raise ValueError("1D or 2D positional encodings are supported.")
-        
+            raise ValueError("1D, 2D, or 3D (from np.mgrid) positional encodings are supported.")
+
         if approach == 'sine':
             if ndim == 1: # Sinusoidal positional encode lines. All points within the same line share the encoding.
-                self.PE = PE1D(Ny, d_model)
+                PE = PE1D(Ny, d_model)
                 self.approach = 'SINE1D'
             else: # Sinusoidal positional encode 2D space.
-                self.PE = PE2D(Ny, Nx, d_model)
+                PE = PE2D(Ny, Nx, d_model)
                 self.approach = 'SINE2D'
         elif approach == 'RoPE': # TO-DO
             if ndim == 2: # Rotary positional encode lines.
-                self.PE = RoPE1D(Ny, d_model)
+                PE = RoPE1D(Ny, d_model)
                 self.approach = 'RoPE1D'
             else: # Rotary encoding 2D space.
-                self.PE = RoPE2D(Ny, Nx, d_model)
+                PE = RoPE2D(Ny, Nx, d_model)
                 self.approach = 'RoPE2D'
 
+        # Register as buffer so it moves with .to(device)
+        self.register_buffer('PE', PE)
+
         return
-    
+
     def forward(self, input):
         """
         Args:
@@ -69,7 +78,7 @@ def PE1D(Ny, d_model):
     PE (Tensor):            Output tensor of shape [1, seq_length, d_model].
     """
     PE = torch.zeros(Ny, d_model)
-    position = torch.arange(-Ny // 2, Ny // 2 - 1, dtype=torch.float).unsqueeze(1) # Shift by half.
+    position = torch.arange(-Ny // 2, Ny // 2, dtype=torch.float).unsqueeze(1) # Shift by half.
     division_term = torch.exp(-torch.arange(0, d_model, 2, dtype=torch.float) / d_model * math.log(10000))
     PE[:, 0::2] = torch.sin(position * division_term)
     PE[:, 1::2] = torch.cos(position * division_term)
@@ -96,6 +105,6 @@ def PE2D(Ny, Nx, d_model):
     PEx = PEx.repeat(Ny, 1, 1) # [Ny, Nx, d_model / 2]
 
     PE_grid = torch.cat([PEy, PEx], dim=-1) # [Ny, Nx, d_model]
-    PE_flat = PE_grid.view(Ny * Nx, PE_grid) # [Ny * Nx, d_model]
+    PE_flat = PE_grid.view(Ny * Nx, d_model) # [Ny * Nx, d_model]
 
     return PE_flat.unsqueeze(0)

@@ -21,13 +21,11 @@ class multi_head_self_attn(nn.Module):
         """
         super().__init__()
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
         # Queries, keys and values
-        self.W_QKV = nn.Linear(in_features=d_model, out_features=3 * d_model, device=device)
+        self.W_QKV = nn.Linear(in_features=d_model, out_features=3 * d_model)
 
         # Fusion layer
-        self.W_O = nn.Linear(in_features=d_model, out_features=d_model, device=device)
+        self.W_O = nn.Linear(in_features=d_model, out_features=d_model)
 
         # Useful parameters
         self.num_heads = num_heads
@@ -44,18 +42,18 @@ class multi_head_self_attn(nn.Module):
         omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
         """
         batch_size, seq_length, _ = input.size()
-        omega = omega.unsqueeze(1, 2)
+        omega = omega.unsqueeze(1).unsqueeze(2)
 
         # Calculate Q, K and V.
         QKV = self.W_QKV(input) # [batch_size, seq_length, 3 * d_model]
-        QKV = torch.view(batch_size, seq_length, 3, self.num_heads, self.d_k).permute(2, 0, 3, 1, 4) # [3, batch_size, num_heads, seq_length, d_k]
+        QKV = QKV.view(batch_size, seq_length, 3, self.num_heads, self.d_k).permute(2, 0, 3, 1, 4) # [3, batch_size, num_heads, seq_length, d_k]
         Q, K, V = QKV[0], QKV[1], QKV[2] # [batch_size, num_heads, seq_length, d_k]
 
         # Attention scores.
-        attention_scores = torch.matmul(Q, K.tranpose(-2, -1)) / math.sqrt(self.d_k) # [batch_size, num_heads, seq_length, seq_length]
+        attention_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k) # [batch_size, num_heads, seq_length, seq_length]
 
         if omega is not None:
-            attention_scores = attention_scores.mask_fill(omega==0, float('-inf'))
+            attention_scores = attention_scores.masked_fill(omega==0, float('-inf'))
         attention_scores = F.softmax(attention_scores, dim=-1)
 
         # Multiply with V.
@@ -82,14 +80,12 @@ class multi_head_cross_attn(nn.Module):
         """
         super().__init__()
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
         # Queries, keys and values.
-        self.W_Q = nn.Linear(in_features=d_model, out_features=d_model, device=device)
-        self.W_KV = nn.Linear(in_features=d_model, out_features=2 * d_model, device=device)
+        self.W_Q = nn.Linear(in_features=d_model, out_features=d_model)
+        self.W_KV = nn.Linear(in_features=d_model, out_features=2 * d_model)
 
         # Fusion layer.
-        self.W_O = nn.Linear(in_features=d_model, out_features=d_model, device=device)
+        self.W_O = nn.Linear(in_features=d_model, out_features=d_model)
 
         # Useful parameters.
         self.num_heads = num_heads
@@ -112,7 +108,7 @@ class multi_head_cross_attn(nn.Module):
         Q = self.W_Q(PE_p) # [batch_size, seq_length1, d_model]
         KV = self.W_KV(O) # [batch_size, seq_length2, 2 * d_model]
         Q = Q.view(batch_size, seq_length1, self.num_heads, self.d_k).permute(0, 2, 1, 3) # [batch_size, num_heads, seq_length1, d_k]
-        KV = KV.view(batch_size, seq_length2, 2, self.num_head, self.d_k).permute(2, 0, 3, 1, 4) # [2, batch_size, num_heads, seq_length2, d_k]
+        KV = KV.view(batch_size, seq_length2, 2, self.num_heads, self.d_k).permute(2, 0, 3, 1, 4) # [2, batch_size, num_heads, seq_length2, d_k]
         K, V = KV[0], KV[1] # [batch_size, num_heads, seq_length2, d_k]
 
         # Calculate attention scores.

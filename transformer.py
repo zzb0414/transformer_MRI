@@ -25,11 +25,11 @@ class transformer(nn.Module):
         pos (ndarray):          Position vector (1D) or matrix (2D). If 1D: [0, H - 1]. If 2D: [0, W - 1] x [0, H - 1].
         d_model (int):          Embedding space dimension.
         N (int):                Encoder/Decoder layers.
-        num_head )int):         Number of attention heads.
+        num_heads (int):        Number of attention heads.
         W (int):                Full k-space width.
         H (int):                Full k-space height.
         activition (nn.Module): Activition function.
-        appraoch (string):      Encoding approach.
+        approach (string):      Encoding approach.
         dropout_emb (float):    Embedding layer dropout rate.
         dropout_enc (float):    Encoding layer dropout rate.
         dropout_dec (float):    Decoding layer dropout rate.
@@ -38,11 +38,15 @@ class transformer(nn.Module):
 
         self.embedding = embedding(input_channel, output_channel, bias, activition, dropout_emb)
         self.PE = positional_encoding(pos, d_model, approach)
-        self.PE_LR = positional_encoding(pos[H // 4:-H // 4][W // 4:-W // 4], d_model, approach)
+        # For low-res, slice the center region: pos[:, y_start:y_end, x_start:x_end]
+        self.PE_LR = positional_encoding(pos[:, H // 4:-H // 4, W // 4:-W // 4], d_model, approach)
 
         self.encoders = nn.ModuleList([encoder_block(d_model, num_heads, dropout_enc) for _ in range(N)])
         self.LR_decoders = nn.ModuleList([decoder_block(d_model, num_heads, W // 2, H // 2, dropout_dec) for _ in range(N)])
         self.HR_decoders = nn.ModuleList([decoder_block(d_model, num_heads, W, H, dropout_dec) for _ in range(N)])
+
+        # Final output projection: d_model -> 2 (real + imaginary for k-space)
+        self.predict = nn.Linear(d_model, 2)
 
         return
 
@@ -54,6 +58,8 @@ class transformer(nn.Module):
         ksp (tensor):           Input k-space tensor, [batch_size, seq_length, 2]
         omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
         """
+        batch_size = ksp.size(0)
+
         # Linear embedding and PE ksp.
         input = self.embedding(ksp)
         input = self.PE(input)
@@ -64,15 +70,55 @@ class transformer(nn.Module):
             output_enc = self.encoders[ii](output_enc, omega)
 
         # Gather PE_p and output_enc for LR decoders.
-        PE_p = self.PE_LR.PE
+        # Expand PE to match batch size [1, seq, d_model] -> [batch, seq, d_model]
+        PE_p = self.PE_LR.PE.expand(batch_size, -1, -1)
         output_LR_dec = output_enc
         for ii in range(len(self.LR_decoders)):
-            output_LR_dec = self.LR_decoders(PE_p, output_LR_dec, None, LR=True)
+            output_LR_dec = self.LR_decoders[ii](PE_p, output_LR_dec, None, LR=True)
 
         # Gather PE_p and output_LR_dec for HR decoders.
-        PE_p = self.PE.PE # Need to re-investigate. This part is very complicated.
+        PE_p = self.PE.PE.expand(batch_size, -1, -1) # Expand to batch size
         output_HR_dec = output_LR_dec
         for ii in range(len(self.HR_decoders)):
-            output_HR_dec = self.HR_decoders(PE_p, output_HR_dec, LR=False)
+            output_HR_dec = self.HR_decoders[ii](PE_p, output_HR_dec, None, LR=False)
 
-        return output_HR_dec
+        # Final output projection to k-space [batch, seq, d_model] -> [batch, seq, 2]
+        output_kspace = self.predict(output_HR_dec)
+
+        return output_kspace
+
+        # === ALTERNATIVE IMPLEMENTATIONS ===
+        # To use these, comment out the return above and uncomment one section below
+
+        # --- OPTION B: Cascading Query, Constant K/V from Encoder ---
+        # Query=prev layer output, K/V=encoder output (constant), Self-Attn Q/K/V=from cross-attn
+        # LR Decoders:
+        #   query = self.PE_LR.PE
+        #   for decoder in self.LR_decoders:
+        #       query = decoder(query, output_enc, None, LR=True)
+        #   output_LR_dec = query
+        #
+        # HR Decoders:
+        #   query = self.PE.PE
+        #   for decoder in self.HR_decoders:
+        #       query = decoder(query, output_LR_dec, None, LR=False)
+        #   output_HR_dec = query
+        #
+        # NOTE: Current decoder_block.forward() keeps K/V constant and only Q cascades
+
+        # --- OPTION C: Full Cascade (All Q, K, V evolve through layers) ---
+        # For this option, decoder_block would need modification to accept single input
+        # that serves as both Q (for cross-attn) and K/V (fed from prev layer)
+        # LR Decoders:
+        #   x = self.PE_LR.PE
+        #   for decoder in self.LR_decoders:
+        #       x = decoder(x, x, None, LR=True)  # x as both Q and K/V
+        #   output_LR_dec = x
+        #
+        # HR Decoders:
+        #   x = self.PE.PE
+        #   for decoder in self.HR_decoders:
+        #       x = decoder(x, x, None, LR=False)  # x as both Q and K/V
+        #   output_HR_dec = x
+        #
+        # NOTE: This requires both args to decoder to be the previous layer's output
