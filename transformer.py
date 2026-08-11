@@ -55,8 +55,8 @@ class transformer(nn.Module):
         Transformer foward operation.
 
         Args:
-        ksp (tensor):           Input k-space tensor, [batch_size, seq_length, 2]
-        omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
+        ksp (tensor):           Input k-space tensor, [batch_size, seq_length1, 2]
+        omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length2]
         """
         batch_size = ksp.size(0)
 
@@ -65,6 +65,7 @@ class transformer(nn.Module):
         input = self.PE(input)
 
         # Pass into encoders.
+        # TO-DO: Send undersampled data instead of zero-filled data. Therefore, omega should also be ignored during the encoder path.
         output_enc = input
         for ii in range(len(self.encoders)):
             output_enc = self.encoders[ii](output_enc, omega)
@@ -77,6 +78,7 @@ class transformer(nn.Module):
             output_LR_dec = self.LR_decoders[ii](PE_p, output_LR_dec, None, LR=True)
 
         # Gather PE_p and output_LR_dec for HR decoders.
+        # TO-DO: Should use omega to create the unsampled kspace locations.
         PE_p = self.PE.PE.expand(batch_size, -1, -1) # Expand to batch size
         output_HR_dec = output_LR_dec
         for ii in range(len(self.HR_decoders)):
