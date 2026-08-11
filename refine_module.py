@@ -28,11 +28,15 @@ class refine_module(nn.Module):
         self.FFT = lambda x: torch.fft.fftshift(torch.fft.fft2(x, norm='ortho')) # Expect input tensor x to have shape [batch_size, W, H]
         self.iFFT = lambda x: torch.fft.ifft2(torch.fft.ifftshift(x), norm='ortho')
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=64, out_channels=2, kernel_size=3, padding=1),
         )
 
         self.W = W
@@ -55,7 +59,7 @@ class refine_module(nn.Module):
         S = S[..., 0] + 1j * S[..., 1]
 
         # Apply iFFT.
-        img = torch.fft.ifft2(torch.fft.ifftshift(S), norm='ortho')  # [batch_size, W, H], complex
+        img = torch.fftshift(torch.fft.ifft2(torch.fft.ifftshift(S, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
 
         # Convert complex to 2-channel real tensor [batch_size, 2, W, H]
         img = torch.stack((torch.real(img), torch.imag(img)), dim=1)
@@ -67,11 +71,11 @@ class refine_module(nn.Module):
         img_complex = torch.complex(img[:, 0, :, :], img[:, 1, :, :])
 
         # Apply FFT back to 2D kspace.
-        ksp = torch.fft.fftshift(torch.fft.fft2(img_complex, norm='ortho'))  # [batch_size, W, H], complex
+        ksp = torch.fft.ifftshift(torch.fft.fft2(torch.fft.fftshift(img_complex, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
         ksp = torch.stack((torch.real(ksp), torch.imag(ksp)), dim=-1)  # [batch_size, W, H, 2]
         ksp = ksp.contiguous().view(batch_size, seq_length, 2)  # [batch_size, seq_length, 2]
 
         # Embed back to be passed into next layer.
-        S_hat = S_identity + self.embedding(ksp)
+        S_hat = S_identity + self.embedding(ksp) # Need to think whether residual connection is proper.
 
         return S_hat
