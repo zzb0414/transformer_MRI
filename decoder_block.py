@@ -40,7 +40,7 @@ class decoder_block(nn.Module):
 
         return
     
-    def forward(self, PE_p, O, omega, LR=True):
+    def forward(self, PE_p, O, LR=True):
         """
         Args:
 
@@ -57,9 +57,9 @@ class decoder_block(nn.Module):
 
         # MHSA and residual connection 2 for LR decoder only. For HR decoder, do nothing (flow forward).
         if LR: # Only LR decoder does self attention.
-            # Create mask on the same device as the input
-            omega = torch.ones(batch_size, seq_length, device=cross_attention.device)
-            self_attention = self.self_attn(cross_attention, omega)  # TODO: Review against technical reference - currently using all coordinates as queries for fully sampled LR output
+            # Self attention block does not need sampling mask now.
+            # omega = torch.ones(batch_size, seq_length, device=cross_attention.device)
+            self_attention = self.self_attn(cross_attention)
             self_attention = self.LN2(cross_attention + self.dropout(self_attention))
         else:
             self_attention = cross_attention
@@ -75,3 +75,10 @@ class decoder_block(nn.Module):
             rm = feed_forward
 
         return rm
+
+    def flops(self):
+        flops = 0
+        flops += self.cross_attn.flops() + self.self_attn.flops()
+        flops += 2 * 4 * self.d_model ** 2 # Two MLP's in the FFN.
+
+        return flops

@@ -34,7 +34,7 @@ class multi_head_self_attn(nn.Module):
 
         return
     
-    def forward(self, input, omega):
+    def forward(self, input):
         """
         Args:
 
@@ -42,7 +42,7 @@ class multi_head_self_attn(nn.Module):
         omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
         """
         batch_size, seq_length, _ = input.size()
-        omega = omega.unsqueeze(1).unsqueeze(2)
+        # omega = omega.unsqueeze(1).unsqueeze(2)
 
         # Calculate Q, K and V.
         QKV = self.W_QKV(input) # [batch_size, seq_length, 3 * d_model]
@@ -52,8 +52,9 @@ class multi_head_self_attn(nn.Module):
         # Attention scores.
         attention_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k) # [batch_size, num_heads, seq_length, seq_length]
 
-        if omega is not None:
-            attention_scores = attention_scores.masked_fill(omega==0, float('-inf'))
+        # omega is not needed as input is undersampled.
+        # if omega is not None:
+        #     attention_scores = attention_scores.masked_fill(omega==0, float('-inf'))
         attention_scores = F.softmax(attention_scores, dim=-1)
 
         # Multiply with V.
@@ -64,7 +65,7 @@ class multi_head_self_attn(nn.Module):
     
     def flops(self):
         flops = 0
-        flops += 3 * self.d_model ** 2
+        flops += 4 * self.d_model ** 2
 
         return flops
     
@@ -123,5 +124,6 @@ class multi_head_cross_attn(nn.Module):
     
     def flops(self):
         flops = 0
+        flops += 4 * self.d_model ** 2 # W_Q, W_K, W_V and W_O
 
         return flops

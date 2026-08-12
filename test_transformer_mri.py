@@ -96,18 +96,19 @@ def test_multi_head_self_attn():
     x = torch.randn(batch_size, seq_len, d_model)
 
     # Test without mask
-    omega = torch.ones(batch_size, seq_len)
-    out = attn(x, omega)
+    # omega = torch.ones(batch_size, seq_len)
+    # out = attn(x, omega)
+    out = attn(x)
     assert out.shape == x.shape, \
         f"Expected shape {x.shape}, got {out.shape}"
     print(f"[PASS] Self-attention output shape: {out.shape}")
 
     # Test with mask (some positions masked)
-    omega_masked = torch.ones(batch_size, seq_len)
-    omega_masked[:, ::2] = 0  # Mask every other position
-    out_masked = attn(x, omega_masked)
-    assert out_masked.shape == x.shape
-    print("[PASS] Self-attention with mask works")
+    # omega_masked = torch.ones(batch_size, seq_len)
+    # omega_masked[:, ::2] = 0  # Mask every other position
+    # out_masked = attn(x, omega_masked)
+    # assert out_masked.shape == x.shape
+    # print("[PASS] Self-attention with mask works")
 
     # Test gradient flow
     loss = out.sum()
@@ -162,16 +163,18 @@ def test_encoder_block():
 
     enc = encoder_block(d_model, num_heads, dropout=0.1)
     x = torch.randn(batch_size, seq_len, d_model)
-    omega = torch.ones(batch_size, seq_len)
+    # omega = torch.ones(batch_size, seq_len)
 
-    out = enc(x, omega)
+    # out = enc(x, omega)
+    out = enc(x)
     assert out.shape == x.shape
     print(f"[PASS] Encoder output shape: {out.shape}")
 
     # Test with different sequence lengths
     x_short = torch.randn(batch_size, 50, d_model)
-    omega_short = torch.ones(batch_size, 50)
-    out_short = enc(x_short, omega_short)
+    # omega_short = torch.ones(batch_size, 50)
+    # out_short = enc(x_short, omega_short)
+    out_short = enc(x_short)
     assert out_short.shape == x_short.shape
     print("[PASS] Encoder handles variable sequence lengths")
 
@@ -196,9 +199,10 @@ def test_decoder_block():
     dec_lr = decoder_block(d_model, num_heads, W, H, dropout=0.1)
     PE_p = torch.randn(batch_size, seq_len_full, d_model)
     O = torch.randn(batch_size, seq_len_kv, d_model)
-    omega = torch.ones(batch_size, seq_len_full)
+    # omega = torch.ones(batch_size, seq_len_full)
 
-    out_lr = dec_lr(PE_p, O, omega, LR=True)
+    # out_lr = dec_lr(PE_p, O, omega, LR=True)
+    out_lr = dec_lr(PE_p, O, LR=True)
     assert out_lr.shape == PE_p.shape
     print(f"[PASS] LR decoder output shape: {out_lr.shape}")
 
@@ -208,7 +212,7 @@ def test_decoder_block():
     PE_p_hr = torch.randn(batch_size, seq_len_full, d_model)
     O_hr = torch.randn(batch_size, seq_len_kv, d_model)
 
-    out_hr = dec_hr(PE_p_hr, O_hr, None, LR=False)
+    out_hr = dec_hr(PE_p_hr, O_hr, LR=False)
     assert out_hr.shape == PE_p_hr.shape
     print(f"[PASS] HR decoder output shape: {out_hr.shape}")
 
@@ -264,14 +268,22 @@ def test_transformer():
     W, H = 32, 32  # Small image for testing
     seq_len = W * H
 
+    # Test input
+    batch_size = 1
+    ksp = torch.randn(batch_size, seq_len, input_channel)
+    
     # Create model with proper 2D position array [2, H, W]
     pos = np.mgrid[0:H, 0:W]
+    omega = torch.ones(1, seq_len)
+    # Mask some positions
+    omega[:, ::2] = 0
     model = transformer(
         input_channel=input_channel,
         output_channel=output_channel,
         bias=False,
         pos=pos,
         d_model=d_model,
+        omega=omega,
         N=N,
         num_heads=num_heads,
         W=W,
@@ -282,16 +294,10 @@ def test_transformer():
         dropout_enc=0.0,
         dropout_dec=0.0
     )
-
-    # Test input
-    batch_size = 2
-    ksp = torch.randn(batch_size, seq_len, input_channel)
-    omega = torch.ones(batch_size, seq_len)
-    # Mask some positions
-    omega[:, ::2] = 0
-
+    
     # Forward pass
-    output = model(ksp, omega)
+    ksp_us = torch.masked_select(ksp, omega.unsqueeze(-1).bool()).view(batch_size, -1, input_channel)
+    output = model(ksp_us)
 
     # Expected output: [batch_size, seq_len, 2] (real + imag k-space)
     assert output.shape == (batch_size, seq_len, 2), \
@@ -306,8 +312,9 @@ def test_transformer():
 
     # Test with different batch sizes
     ksp_single = torch.randn(1, seq_len, input_channel)
-    omega_single = torch.ones(1, seq_len)
-    output_single = model(ksp_single, omega_single)
+    ksp_single_us = torch.masked_select(ksp_single, omega.unsqueeze(-1).bool()).view(1, -1, input_channel)
+    # omega_single = torch.ones(1, seq_len)
+    output_single = model(ksp_single_us)
     assert output_single.shape == (1, seq_len, 2)
     print("[PASS] Model handles batch_size=1")
 

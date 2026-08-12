@@ -41,7 +41,7 @@ class encoder_block(nn.Module):
 
         return
     
-    def forward(self, input, omega):
+    def forward(self, input):
         """
         Args:
 
@@ -49,7 +49,7 @@ class encoder_block(nn.Module):
         omega (tensor):         Sampling mask, 1: sampled, 0: not sampled. [batch_size, seq_length]
         """
         # MHSA block and residual connection 1.
-        attention = self.self_attn(input, omega)
+        attention = self.self_attn(input)
         input = self.LN1(input + self.dropout(attention))
 
         # FFN and residual connection 2.
