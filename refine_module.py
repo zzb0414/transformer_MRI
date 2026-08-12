@@ -25,8 +25,8 @@ class refine_module(nn.Module):
         self.predict = nn.Linear(d_model, 2, bias=False)
         self.embedding = nn.Linear(2, d_model, bias=False)
 
-        self.FFT = lambda x: torch.fft.fftshift(torch.fft.fft2(x, norm='ortho')) # Expect input tensor x to have shape [batch_size, W, H]
-        self.iFFT = lambda x: torch.fft.ifft2(torch.fft.ifftshift(x), norm='ortho')
+        self.FFT = lambda x: torch.fft.ifftshift(torch.fft.fft2(torch.fft.fftshift(x, dim=(1, 2)), norm='ortho'), dim=(1, 2)) # Expect input tensor x to have shape [batch_size, W, H]
+        self.iFFT = lambda x: torch.fft.fftshift(torch.fft.ifft2(torch.fft.ifftshift(x, dim=(1, 2)), norm='ortho'), dim=(1, 2))
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1),
             nn.LeakyReLU(),
@@ -59,7 +59,8 @@ class refine_module(nn.Module):
         S = S[..., 0] + 1j * S[..., 1]
 
         # Apply iFFT.
-        img = torch.fftshift(torch.fft.ifft2(torch.fft.ifftshift(S, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
+        # img = torch.fft.fftshift(torch.fft.ifft2(torch.fft.ifftshift(S, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
+        img = self.iFFT(S)
 
         # Convert complex to 2-channel real tensor [batch_size, 2, W, H]
         img = torch.stack((torch.real(img), torch.imag(img)), dim=1)
@@ -71,7 +72,8 @@ class refine_module(nn.Module):
         img_complex = torch.complex(img[:, 0, :, :], img[:, 1, :, :])
 
         # Apply FFT back to 2D kspace.
-        ksp = torch.fft.ifftshift(torch.fft.fft2(torch.fft.fftshift(img_complex, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
+        # ksp = torch.fft.ifftshift(torch.fft.fft2(torch.fft.fftshift(img_complex, dim=(1, 2)), norm='ortho'), dim=(1, 2))  # [batch_size, W, H], complex
+        ksp = self.FFT(img_complex)
         ksp = torch.stack((torch.real(ksp), torch.imag(ksp)), dim=-1)  # [batch_size, W, H, 2]
         ksp = ksp.contiguous().view(batch_size, seq_length, 2)  # [batch_size, seq_length, 2]
 
