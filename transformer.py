@@ -78,7 +78,7 @@ class transformer(nn.Module):
         for ii in range(len(self.encoders)):
             # output_enc = self.encoders[ii](output_enc, omega)
             output_enc = self.encoders[ii](output_enc)
-        print(f"Encoder output shape: {output_enc.shape}")
+        # print(f"Encoder output shape: {output_enc.shape}")
 
         # Gather PE_p and output_enc for LR decoders.
         # Expand PE to match batch size [1, seq, d_model] -> [batch, seq, d_model]
@@ -86,13 +86,12 @@ class transformer(nn.Module):
         output_LR_dec = output_enc
         for ii in range(len(self.LR_decoders)):
             output_LR_dec = self.LR_decoders[ii](PE_LR, output_LR_dec, LR=True)
-        print(f"LR decoder output shape: {output_LR_dec.shape}")
+        # print(f"LR decoder output shape: {output_LR_dec.shape}")
 
         # Gather PE_p and output_LR_dec for HR decoders.
-        # TO-DO: Should use omega to create the unsampled kspace locations.
         PE_HR = self.PE_HR.PE.expand(batch_size, -1, -1) # Expand to batch size
-        print(f"PE_HR shape {PE_HR.shape}")
-        output_HR_dec = output_LR_dec
+        # print(f"PE_HR shape {PE_HR.shape}")
+        output_HR_dec = output_LR_dec # Need a look at the dimension of input to HR decoders.
         for ii in range(len(self.HR_decoders)):
             output_HR_dec = self.HR_decoders[ii](PE_HR, output_HR_dec, LR=False)
 

@@ -38,6 +38,8 @@ class decoder_block(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
+        self.d_model = d_model
+
         return
     
     def forward(self, PE_p, O, LR=True):
