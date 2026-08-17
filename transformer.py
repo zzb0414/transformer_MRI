@@ -135,3 +135,79 @@ class transformer(nn.Module):
         #   output_HR_dec = x
         #
         # NOTE: This requires both args to decoder to be the previous layer's output
+
+
+def train_model(model, train_loader, optimizer, scheduler, device, criteria, log_dir="D:/models/ksp_transformer", epochs=300):
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter(log_dir=log_dir)
+
+    model.train()
+    
+    for epoch in range(epochs):
+        running_total_loss = 0.0
+        
+        for batch_indx, (inputs, targets) in enumerate(train_loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            
+            outputs = model(inputs)
+            
+            # Individual batch losses
+            batch_MSE_loss = criteria(outputs, targets)
+            
+            # Total composite loss for backprop
+            loss += batch_MSE_loss
+            
+            loss.backward()
+            # Real-time logging of model health metrics to TensorBoard.
+            if batch_indx % 50 == 0: # Log every 50 batches
+                global_step = epoch * len(train_loader) + batch_indx
+                log_model_health(model, writer, global_step)
+            optimizer.step()
+            
+            # Accumulate values
+            running_total_loss += loss.item()
+        
+        # Calculate final epoch averages
+        num_batches = len(train_loader)
+        avg_epoch_loss = running_total_loss / num_batches
+        
+        # Step scheduler based on average total loss
+        scheduler.step(avg_epoch_loss)
+        
+        # Print averages for the epoch
+        current_lr = optimizer.param_groups[0]['lr']
+        if (epoch + 1) % 20 == 0:
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(), # Crucial for LR consistency
+            }
+            torch.save(checkpoint, 'models/checkpoint.pth')
+            print(f"Epoch [{epoch+1}/{epochs}], Avg lss: {avg_epoch_loss:.6f}, LR: {current_lr:.6e}")
+
+        # Initialize best_l1 if first epoch
+        if epoch == 0:
+            best_loss = avg_epoch_loss
+            
+        # Checkpoint based on average plain L1
+        if avg_epoch_loss < best_loss:
+            best_loss = avg_epoch_loss
+            torch.save(model.state_dict(), 'models/best_intermediate_model.pth')
+            print(f"--- New Best loss found: {best_loss:.6f} at Epoch {epoch} ---")
+
+    print('Train completed.')
+
+def log_model_health(model, writer, step):
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.grad is not None:
+            # Log weight and bias values as histograms
+            writer.add_histogram(f"Parameters/{name}", param.data, step)
+            
+            # Log gradient magnitudes as histograms (Crucial for spotting vanishing grads)
+            writer.add_histogram(f"Gradients/{name}", param.grad, step)
+            
+            # Log Scalar Sparsity: percentage of elements near zero
+            sparsity = (param.data.abs() < 1e-4).float().mean().item()
+            writer.add_histogram(f"Sparsity/{name}", sparsity, step)
