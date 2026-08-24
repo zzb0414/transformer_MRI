@@ -10,7 +10,7 @@ class refine_module(nn.Module):
     """
     Refinement module class that is composed of a predict layer, inverse FFT, a ResNet, forward FFT and an embedding layer.
     """
-    def __init__(self, W, H, d_model):
+    def __init__(self, W, H, d_model, dtype=torch.float32):
         """
         Class initlization.
 
@@ -18,25 +18,26 @@ class refine_module(nn.Module):
         W (int):                Full k-space width.
         H (int):                Full k-space height.
         d_model (int):          Embedding space dimension.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
         # Linear projections without activation/dropout for space mapping
-        self.predict = nn.Linear(d_model, 2, bias=False)
-        self.embedding = nn.Linear(2, d_model, bias=False)
+        self.predict = nn.Linear(d_model, 2, bias=False, dtype=dtype)
+        self.embedding = nn.Linear(2, d_model, bias=False, dtype=dtype)
 
         self.FFT = lambda x: torch.fft.ifftshift(torch.fft.fft2(torch.fft.fftshift(x, dim=(1, 2)), norm='ortho'), dim=(1, 2)) # Expect input tensor x to have shape [batch_size, W, H]
         self.iFFT = lambda x: torch.fft.fftshift(torch.fft.ifft2(torch.fft.ifftshift(x, dim=(1, 2)), norm='ortho'), dim=(1, 2))
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1, dtype=dtype),
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, dtype=dtype),
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, dtype=dtype),
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, dtype=dtype),
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=64, out_channels=2, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=2, kernel_size=3, padding=1, dtype=dtype),
         )
 
         self.W = W

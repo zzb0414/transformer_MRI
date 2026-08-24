@@ -11,7 +11,7 @@ class embedding(nn.Module):
     A straight forward single linear embedding layer.
     """
 
-    def __init__(self, input_channel=256, output_channel=768, bias=False, activation=nn.ReLU, drop=0.0):
+    def __init__(self, input_channel=256, output_channel=768, bias=False, activation=nn.ReLU, drop=0.0, dtype=torch.float32):
         """
         A simple MLP.
 
@@ -20,6 +20,7 @@ class embedding(nn.Module):
         output_channel (int):   Dimension of the embedded space.
         bias (bool):            Bias term flag.
         drop (float):           Dropout rate.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
@@ -27,7 +28,7 @@ class embedding(nn.Module):
         self.out_features = output_channel
         self.bias = bias
         self.drop = drop
-        self.W = nn.Linear(in_features=input_channel, out_features=output_channel, bias=bias)
+        self.W = nn.Linear(in_features=input_channel, out_features=output_channel, bias=bias, dtype=dtype)
         self.drop = nn.Dropout(p=drop)
 
         if activation is not None:

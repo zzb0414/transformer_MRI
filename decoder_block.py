@@ -10,7 +10,7 @@ from attention_block import multi_head_self_attn, multi_head_cross_attn
 from refine_module import refine_module
 
 class decoder_block(nn.Module):
-    def __init__(self, d_model, num_heads, W, H, dropout=0.0):
+    def __init__(self, d_model, num_heads, W, H, dropout=0.0, dtype=torch.float32):
         """
         A sequential connection of a cross attention block, a self attention block, a FFN and a refinement module.
 
@@ -20,21 +20,22 @@ class decoder_block(nn.Module):
         W (int):                Image domain width.
         H (int):                Image domain height.
         dropout (float):        Dropout rate.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
-        self.cross_attn = multi_head_cross_attn(d_model, num_heads)
-        self.self_attn = multi_head_self_attn(d_model, num_heads)
+        self.cross_attn = multi_head_cross_attn(d_model, num_heads, dtype=dtype)
+        self.self_attn = multi_head_self_attn(d_model, num_heads, dtype=dtype)
         self.FFN = nn.Sequential(
-            nn.Linear(d_model, 4 * d_model),
+            nn.Linear(d_model, 4 * d_model, dtype=dtype),
             nn.ReLU(),
-            nn.Linear(4 * d_model, d_model),
+            nn.Linear(4 * d_model, d_model, dtype=dtype),
         )
-        self.rm = refine_module(W, H, d_model)
+        self.rm = refine_module(W, H, d_model, dtype=dtype)
 
-        self.LN1 = nn.LayerNorm(d_model)
-        self.LN2 = nn.LayerNorm(d_model)
-        self.LN3 = nn.LayerNorm(d_model)
+        self.LN1 = nn.LayerNorm(d_model, dtype=dtype)
+        self.LN2 = nn.LayerNorm(d_model, dtype=dtype)
+        self.LN3 = nn.LayerNorm(d_model, dtype=dtype)
 
         self.dropout = nn.Dropout(dropout)
 

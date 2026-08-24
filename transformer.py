@@ -14,7 +14,7 @@ from encoder_block import encoder_block
 from decoder_block import decoder_block
 
 class transformer(nn.Module):
-    def __init__(self, input_channel, output_channel, bias, pos, d_model, omega, N, num_heads, W, H, activition=nn.ReLU, approach='sine', dropout_emb=0.0, dropout_enc=0.0, dropout_dec=0.0):
+    def __init__(self, input_channel, output_channel, bias, pos, d_model, omega, N, num_heads, W, H, activition=nn.ReLU, approach='sine', dropout_emb=0.0, dropout_enc=0.0, dropout_dec=0.0, dtype=torch.float32):
         """
         Class initialization.
 
@@ -34,6 +34,7 @@ class transformer(nn.Module):
         dropout_emb (float):    Embedding layer dropout rate.
         dropout_enc (float):    Encoding layer dropout rate.
         dropout_dec (float):    Decoding layer dropout rate.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
@@ -44,13 +45,14 @@ class transformer(nn.Module):
         omega = omega.view(batch_size, -1) # [batch_size, W * H]
         self.PE_enc = copy.deepcopy(PE)
         self.PE_enc.PE = torch.masked_select(PE.PE, omega.unsqueeze(-1).bool()).view(1, -1, d_model)
-        # For low-res, slice the center region: pos[:, y_start:y_end, x_start:x_end]
-        self.PE_LR = positional_encoding(pos[:, H // 4:-H // 4, W // 4:-W // 4], d_model, approach)
+        # For low-res, slice the central 1/4 region: pos[:, y_start:y_end, x_start:x_end]
+        # Keep only the middle quarter (remove 3/8 from each side).
+        self.PE_LR = positional_encoding(pos[:, H * 3 // 8:-H * 3 // 8, W * 3 // 8:-W * 3 // 8], d_model, approach)
         # For high-res, we need the full mask.
         self.PE_HR = PE
 
         self.encoders = nn.ModuleList([encoder_block(d_model, num_heads, dropout_enc) for _ in range(N)])
-        self.LR_decoders = nn.ModuleList([decoder_block(d_model, num_heads, W // 2, H // 2, dropout_dec) for _ in range(N)])
+        self.LR_decoders = nn.ModuleList([decoder_block(d_model, num_heads, W // 4, H // 4, dropout_dec) for _ in range(N)])
         self.HR_decoders = nn.ModuleList([decoder_block(d_model, num_heads, W, H, dropout_dec) for _ in range(N)])
 
         # Final output projection: d_model -> 2 (real + imaginary for k-space)

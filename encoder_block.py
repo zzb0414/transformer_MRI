@@ -13,7 +13,7 @@ class encoder_block(nn.Module):
     An encoder block class composed of a attention block, residual connections, normalization layers and a FFN.
     """
 
-    def __init__(self, d_model, num_heads, dropout=0.0):
+    def __init__(self, d_model, num_heads, dropout=0.0, dtype=torch.float32):
         """
         A sequential connection of a self attention block and a FFN.
 
@@ -21,18 +21,19 @@ class encoder_block(nn.Module):
         d_model (int):          Model dimension.
         num_heads (int):        Number of attention heads.
         dropout (float):        Dropout rate.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
-        self.self_attn = multi_head_self_attn(d_model=d_model, num_heads=num_heads)
+        self.self_attn = multi_head_self_attn(d_model=d_model, num_heads=num_heads, dtype=dtype)
         self.FFN = nn.Sequential(
-            nn.Linear(d_model, 4 * d_model),\
+            nn.Linear(d_model, 4 * d_model, dtype=dtype),\
             nn.ReLU(),
-            nn.Linear(4 * d_model, d_model),
+            nn.Linear(4 * d_model, d_model, dtype=dtype),
         )
 
-        self.LN1 = nn.LayerNorm(d_model)
-        self.LN2 = nn.LayerNorm(d_model)
+        self.LN1 = nn.LayerNorm(d_model, dtype=dtype)
+        self.LN2 = nn.LayerNorm(d_model, dtype=dtype)
 
         self.dropout = nn.Dropout(dropout)
 

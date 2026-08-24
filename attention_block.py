@@ -11,21 +11,22 @@ class multi_head_self_attn(nn.Module):
     """
     A attention block class consisting of self attention using the multi heads attention.
     """
-    def __init__(self, d_model, num_heads):
+    def __init__(self, d_model, num_heads, dtype=torch.float32):
         """
         A multi head self attention.
 
         Args:
         d_model (int):          Model dimension.
         num_heads (int):        Number of attention heads.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
         # Queries, keys and values
-        self.W_QKV = nn.Linear(in_features=d_model, out_features=3 * d_model)
+        self.W_QKV = nn.Linear(in_features=d_model, out_features=3 * d_model, dtype=dtype)
 
         # Fusion layer
-        self.W_O = nn.Linear(in_features=d_model, out_features=d_model)
+        self.W_O = nn.Linear(in_features=d_model, out_features=d_model, dtype=dtype)
 
         # Useful parameters
         self.num_heads = num_heads
@@ -71,22 +72,23 @@ class multi_head_self_attn(nn.Module):
     
 
 class multi_head_cross_attn(nn.Module):
-    def __init__(self, d_model, num_heads):
+    def __init__(self, d_model, num_heads, dtype=torch.float32):
         """
         A multi head cross attention.
 
         Args:
         d_model (int):          Model dimension.
         num_heads (int):        Number of heads.
+        dtype (torch.dtype):    Parameter/compute dtype, e.g. torch.float32 (default), torch.bfloat16, torch.float16.
         """
         super().__init__()
 
         # Queries, keys and values.
-        self.W_Q = nn.Linear(in_features=d_model, out_features=d_model)
-        self.W_KV = nn.Linear(in_features=d_model, out_features=2 * d_model)
+        self.W_Q = nn.Linear(in_features=d_model, out_features=d_model, dtype=dtype)
+        self.W_KV = nn.Linear(in_features=d_model, out_features=2 * d_model, dtype=dtype)
 
         # Fusion layer.
-        self.W_O = nn.Linear(in_features=d_model, out_features=d_model)
+        self.W_O = nn.Linear(in_features=d_model, out_features=d_model, dtype=dtype)
 
         # Useful parameters.
         self.num_heads = num_heads
